@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>10K Lucky Spin</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="hero">
+      <div class="hero-badge left">10K COMMUNITY</div>
+      <div class="hero-title">
+        <div class="title-main">10K</div>
+        <div class="title-sub">Lucky Spin</div>
+      </div>
+      <div class="hero-badge right">BUILT BY THE<br><b>10K COMMUNITY</b></div>
+    </header>
+
+    <section class="layout">
+      <aside class="side left-side">
+        <div class="big-medallion">10K</div>
+
+        <div class="side-card">
+          <span class="icon">👥</span>
+          <div><strong>COMMUNITY</strong><small>DRIVEN</small></div>
+        </div>
+        <div class="side-card">
+          <span class="icon">🌍</span>
+          <div><strong>BUILT</strong><small>TOGETHER</small></div>
+        </div>
+        <div class="side-card">
+          <span class="icon">⚡</span>
+          <div><strong>GOOD VIBES</strong><small>ONLY</small></div>
+        </div>
+        <div class="side-card">
+          <span class="icon">💜</span>
+          <div><strong>10K</strong><small>FOREVER</small></div>
+        </div>
+      </aside>
+
+      <section class="machine">
+        <div class="machine-topline">SPIN TO WIN <b>10K</b> GOOD VIBES</div>
+
+        <div id="message" class="message">Ready. Hit spin.</div>
+
+        <div class="board-wrap">
+          <div id="slotGrid" class="slot-grid"></div>
+          <canvas id="lineCanvas"></canvas>
+        </div>
+
+        <div class="bottom-panels">
+          <div class="info-box sound-box">🔊</div>
+
+          <div class="info-box">
+            <span>CREDITS</span>
+            <strong id="credits">10,000</strong>
+            <small>10K Community Points</small>
+          </div>
+
+          <div class="info-box">
+            <span>BET</span>
+            <strong id="betDisplay">100</strong>
+            <div class="bet-controls">
+              <button id="minusBet" class="small-btn">−</button>
+              <button id="plusBet" class="small-btn">+</button>
+            </div>
+          </div>
+
+          <div class="spin-box">
+            <button id="spinBtn" class="spin-btn">Spin</button>
+            <small>Hold for auto</small>
+          </div>
+
+          <div class="info-box">
+            <span>WIN</span>
+            <strong id="win">0</strong>
+            <small>Match 3 symbols on a line</small>
+          </div>
+
+          <div class="info-box util-box">
+            <button id="resetBtn" class="reset-btn">INFO<br>RESET</button>
+          </div>
+        </div>
+
+        <div class="player-row">
+          <label>
+            <span>PLAYER</span>
+            <input id="playerName" maxlength="18" placeholder="@name" />
+          </label>
+        </div>
+      </section>
+
+      <aside class="side right-side">
+        <h2>WIN LINES</h2>
+
+        <div class="lines-card">
+          <div class="line-label">HORIZONTAL</div>
+          <div class="mini-grid horizontal"></div>
+        </div>
+
+        <div class="lines-card">
+          <div class="line-label">VERTICAL</div>
+          <div class="mini-grid vertical"></div>
+        </div>
+
+        <div class="lines-card">
+          <div class="line-label">DIAGONAL</div>
+          <div class="mini-grid diagonal"></div>
+        </div>
+
+        <div class="rule-box">⭐ MATCH 3 IDENTICAL SYMBOLS ON ANY WIN LINE TO WIN!</div>
+      </aside>
+    </section>
+
+    <section class="leaderboard">
+      <div class="leaderboard-top">
+        <h3>LOCAL LEADERBOARD</h3>
+        <button id="clearBoard" class="outline-btn">CLEAR</button>
+      </div>
+      <ol id="leaderboard"></ol>
+      <button id="shareBtn" class="outline-btn wide">Share on X</button>
+    </section>
+
+    <footer>For community fun only. No real money, no betting, no payouts.</footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
