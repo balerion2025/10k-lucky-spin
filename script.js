@@ -18,10 +18,13 @@ const machine = document.querySelector(".machine");
 const cfg = window.SLOT_CONFIG || {};
 const hasSupabase = Boolean(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
 const STARTING_CREDITS = 10000;
-const STORAGE_PREFIX = "slotV10";
+const STORAGE_PREFIX = "slotV11";
 
 function supabaseHeaders(includeJson = false) {
   const headers = { "apikey": cfg.SUPABASE_ANON_KEY };
+  if (String(cfg.SUPABASE_ANON_KEY || "").startsWith("eyJ")) {
+    headers["Authorization"] = `Bearer ${cfg.SUPABASE_ANON_KEY}`;
+  }
   if (includeJson) headers["Content-Type"] = "application/json";
   return headers;
 }
@@ -424,7 +427,7 @@ window.addEventListener("resize", drawLines);
 playerNameEl.addEventListener("change", () => loadPlayerState(true));
 playerNameEl.addEventListener("blur", () => loadPlayerState(false));
 
-const savedName = localStorage.getItem(`${STORAGE_PREFIX}:activeName`) || localStorage.getItem("slotV9:activeName") || localStorage.getItem("slotV8:activeName") || localStorage.getItem("slotV7Name") || localStorage.getItem("slotV4Name") || "";
+const savedName = localStorage.getItem(`${STORAGE_PREFIX}:activeName`) || localStorage.getItem("slotV10:activeName") || localStorage.getItem("slotV9:activeName") || localStorage.getItem("slotV8:activeName") || localStorage.getItem("slotV7Name") || localStorage.getItem("slotV4Name") || "";
 if (savedName) playerNameEl.value = savedName;
 
 loadPlayerState(false);
