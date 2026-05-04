@@ -19,11 +19,11 @@
 
     <section class="challenge-rules">
       <h2>10K Lucky Spin NFT Challenge</h2>
-      <p>Use your real X username. You get one 10,000-credit run. The best score on the global leaderboard wins.</p>
+      <p>Use your real X username. You start with 10,000 credits. Wins add credits and score. No reset or refill. Best score on the global leaderboard wins.</p>
       <div class="rules-grid">
-        <span>10,000 credits only</span>
-        <span>No reset</span>
-        <span>Best score counts</span>
+        <span>Start: 10,000 credits</span>
+        <span>Wins add credits</span>
+        <span>No reset / no refill</span>
         <span>One X username per player</span>
         <span>Winner must verify X ownership</span>
         <span>Fake/spam entries may be removed</span>
@@ -56,7 +56,7 @@
       <section class="machine">
         <div class="machine-topline">SPIN TO WIN <b>10K</b> GOOD VIBES</div>
 
-        <div id="message" class="message">Challenge mode: 10,000 credits only. No reset. Best score wins.</div>
+        <div id="message" class="message">Challenge mode: 10,000 start credits. Wins add credits. No reset.</div>
 
         <div class="board-wrap">
           <div id="slotGrid" class="slot-grid"></div>
@@ -136,12 +136,39 @@
       <button id="shareBtn" class="outline-btn wide">Share on X</button>
     </section>
 
-    <footer>Challenge mode: 10,000 credits only. No reset during the NFT challenge. Use your real X username. The winner must verify X account ownership before receiving the NFT. Fake, spam, duplicate, or suspicious entries may be removed. For community fun only. No real money, no betting, no payouts.</footer>
+    <footer>Challenge mode: start with 10,000 credits. Wins add credits and score. No reset or refill during the NFT challenge. Use your real X username. The winner must verify X account ownership before receiving the NFT. Fake, spam, duplicate, or suspicious entries may be removed. For community fun only. No real money, no betting, no payouts.</footer>
   </main>
 
   <script src="config.js"></script>
   <script src="script.js"></script>
   <script>
+    finishSpin = async function () {
+      Array.from(gridEl.children).forEach(cell => cell.classList.remove("spinning"));
+      current = Array.from({ length: 9 }, () => weightedRandom());
+      const result = evaluateWin();
+      winningLines = result.lines;
+      lastWin = result.win;
+
+      if (lastWin > 0) {
+        credits += lastWin;
+        score += lastWin;
+        machine.classList.add("flash");
+        messageEl.textContent = isGameOver()
+          ? `WIN +${lastWin.toLocaleString("en-US")} credits! GAME OVER. Final score: ${score.toLocaleString("en-US")}.`
+          : `WIN! ${result.lines.length} line(s) · +${lastWin.toLocaleString("en-US")} credits`;
+        await saveLeaderboard();
+      } else {
+        messageEl.textContent = isGameOver()
+          ? `No line. GAME OVER. Final score: ${score.toLocaleString("en-US")}. No reset in challenge mode.`
+          : "No line. Spin again.";
+      }
+
+      renderGrid();
+      updateUI();
+      await renderLeaderboard();
+      spinning = false;
+    };
+
     window.addEventListener('load', function () {
       const oldReset = document.getElementById('resetBtn');
       const message = document.getElementById('message');
@@ -153,7 +180,7 @@
       oldReset.parentNode.replaceChild(infoOnly, oldReset);
       infoOnly.addEventListener('click', function () {
         if (message) {
-          message.textContent = 'Challenge mode: no reset. One real X username per player. Winner must verify X ownership.';
+          message.textContent = 'Challenge mode: wins add credits, but reset/refill is disabled. One real X username per player.';
         }
       });
     });
