@@ -20,6 +20,15 @@ const hasSupabase = Boolean(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
 const STARTING_CREDITS = 10000;
 const STORAGE_PREFIX = "slotV8";
 
+function supabaseHeaders(includeJson = false) {
+  const headers = { "apikey": cfg.SUPABASE_ANON_KEY };
+  if (includeJson) headers["Content-Type"] = "application/json";
+  if (!String(cfg.SUPABASE_ANON_KEY).startsWith("sb_publishable_")) {
+    headers["Authorization"] = `Bearer ${cfg.SUPABASE_ANON_KEY}`;
+  }
+  return headers;
+}
+
 const symbols = [
   { id:"yellow", img:"images/yellow-owl.png", name:"Yellow Owl", weight:12 },
   { id:"blue", img:"images/blue-pirate-owl.png", name:"Blue Pirate Owl", weight:12 },
@@ -268,9 +277,7 @@ async function saveLeaderboard() {
       const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?id=eq.${existing.id}`, {
         method: "PATCH",
         headers: {
-          "apikey": cfg.SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/json",
+          ...supabaseHeaders(true),
           "Prefer": "return=minimal"
         },
         body: JSON.stringify({ score, credits, last_win: lastWin })
@@ -282,9 +289,7 @@ async function saveLeaderboard() {
     const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores`, {
       method: "POST",
       headers: {
-        "apikey": cfg.SUPABASE_ANON_KEY,
-        "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
+        ...supabaseHeaders(true),
         "Prefer": "return=minimal"
       },
       body: JSON.stringify({ name, score, credits, last_win: lastWin })
@@ -300,10 +305,7 @@ async function getPlayerGlobalScore(name) {
   if (!hasSupabase) return null;
   try {
     const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?select=id,name,score,credits,last_win&name=eq.${encodeURIComponent(name)}&order=score.desc&limit=1`, {
-      headers: {
-        "apikey": cfg.SUPABASE_ANON_KEY,
-        "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`
-      }
+      headers: supabaseHeaders(false)
     });
     if (!response.ok) throw new Error("Player score load failed");
     const data = await response.json();
@@ -318,10 +320,7 @@ async function getGlobalLeaderboard() {
   if (!hasSupabase) return null;
   try {
     const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?select=name,score,credits,last_win,created_at&order=score.desc&order=credits.desc&limit=100`, {
-      headers: {
-        "apikey": cfg.SUPABASE_ANON_KEY,
-        "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`
-      }
+      headers: supabaseHeaders(false)
     });
     if (!response.ok) throw new Error("Global leaderboard load failed");
     const rows = await response.json();
@@ -355,7 +354,7 @@ async function renderLeaderboard() {
 
   const localList = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}:leaderboard`) || "[]");
   if (!localList.length) {
-    leaderboardEl.innerHTML = hasSupabase ? "<li>Global leaderboard is connected. No wins yet.</li>" : "<li>No wins yet. Be first.</li>";
+    leaderboardEl.innerHTML = hasSupabase ? "<li>Global leaderboard connected, but no global wins yet.</li>" : "<li>No wins yet. Be first.</li>";
     return;
   }
 
