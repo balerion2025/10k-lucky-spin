@@ -18,7 +18,7 @@ const machine = document.querySelector(".machine");
 const cfg = window.SLOT_CONFIG || {};
 const hasSupabase = Boolean(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
 const STARTING_CREDITS = 10000;
-const STORAGE_PREFIX = "slotV7";
+const STORAGE_PREFIX = "slotV8";
 
 const symbols = [
   { id:"yellow", img:"images/yellow-owl.png", name:"Yellow Owl", weight:12 },
@@ -37,13 +37,46 @@ const paylines = [
   [0,4,8], [2,4,6]
 ];
 
-let credits = Number(localStorage.getItem(`${STORAGE_PREFIX}Credits`) || STARTING_CREDITS);
-let score = Number(localStorage.getItem(`${STORAGE_PREFIX}Score`) || 0);
-let bet = Number(localStorage.getItem(`${STORAGE_PREFIX}Bet`) || 100);
+let credits = STARTING_CREDITS;
+let score = 0;
+let bet = Number(localStorage.getItem(`${STORAGE_PREFIX}:bet`) || 100);
 let current = [];
 let spinning = false;
 let lastWin = 0;
 let winningLines = [];
+let activeName = "";
+
+function cleanName(name) {
+  return (name || "Anon").replace(/[^\w .@-]/g, "").slice(0, 18) || "Anon";
+}
+
+function playerKey(name, field) {
+  return `${STORAGE_PREFIX}:${cleanName(name).toLowerCase()}:${field}`;
+}
+
+function loadPlayerState(showMessage = false) {
+  const name = cleanName(playerNameEl.value);
+  activeName = name;
+  localStorage.setItem(`${STORAGE_PREFIX}:activeName`, name);
+
+  credits = Number(localStorage.getItem(playerKey(name, "credits")) || STARTING_CREDITS);
+  score = Number(localStorage.getItem(playerKey(name, "score")) || 0);
+  lastWin = 0;
+  winningLines = [];
+  updateUI();
+
+  if (showMessage) {
+    messageEl.textContent = `${name} loaded. ${credits.toLocaleString("en-US")} credits available.`;
+  }
+}
+
+function savePlayerState() {
+  const name = cleanName(playerNameEl.value);
+  localStorage.setItem(`${STORAGE_PREFIX}:activeName`, name);
+  localStorage.setItem(playerKey(name, "credits"), credits);
+  localStorage.setItem(playerKey(name, "score"), score);
+  localStorage.setItem(`${STORAGE_PREFIX}:bet`, bet);
+}
 
 function weightedRandom() {
   const total = symbols.reduce((sum, s) => sum + s.weight, 0);
@@ -83,13 +116,7 @@ function updateUI() {
   creditsEl.textContent = credits.toLocaleString("en-US");
   betDisplay.textContent = bet.toLocaleString("en-US");
   winEl.textContent = lastWin.toLocaleString("en-US");
-  localStorage.setItem(`${STORAGE_PREFIX}Credits`, credits);
-  localStorage.setItem(`${STORAGE_PREFIX}Score`, score);
-  localStorage.setItem(`${STORAGE_PREFIX}Bet`, bet);
-}
-
-function cleanName(name) {
-  return (name || "Anon").replace(/[^\w .@-]/g, "").slice(0, 18) || "Anon";
+  savePlayerState();
 }
 
 function isGameOver() {
@@ -98,8 +125,12 @@ function isGameOver() {
 
 function spin() {
   if (spinning) return;
+
+  const currentName = cleanName(playerNameEl.value);
+  if (currentName !== activeName) loadPlayerState(true);
+
   if (isGameOver()) {
-    messageEl.textContent = `GAME OVER. Final run score: ${score.toLocaleString("en-US")}. Hit RESET to start a new run.`;
+    messageEl.textContent = `GAME OVER for ${currentName}. Final score: ${score.toLocaleString("en-US")}. No reset/refill in challenge mode.`;
     return;
   }
 
@@ -132,16 +163,16 @@ async function finishSpin() {
   lastWin = result.win;
 
   if (lastWin > 0) {
-    // Prize credits do NOT refill the run budget. They only increase the run score.
+    credits += lastWin;
     score += lastWin;
     machine.classList.add("flash");
     messageEl.textContent = isGameOver()
-      ? `WIN +${lastWin.toLocaleString("en-US")}! GAME OVER. Final run score: ${score.toLocaleString("en-US")}.`
-      : `WIN! ${result.lines.length} line(s) · +${lastWin.toLocaleString("en-US")}`;
+      ? `WIN +${lastWin.toLocaleString("en-US")} credits! GAME OVER. Final score: ${score.toLocaleString("en-US")}.`
+      : `WIN! ${result.lines.length} line(s) · +${lastWin.toLocaleString("en-US")} credits`;
     await saveLeaderboard();
   } else {
     messageEl.textContent = isGameOver()
-      ? `No line. GAME OVER. Final run score: ${score.toLocaleString("en-US")}. Hit RESET for a new run.`
+      ? `No line. GAME OVER. Final score: ${score.toLocaleString("en-US")}. No reset/refill in challenge mode.`
       : "No line. Spin again.";
   }
 
@@ -160,6 +191,7 @@ function evaluateWin() {
     }
   }
   if (!lines.length) return { win: 0, lines: [] };
+
   let multiplier = 0;
   for (const line of lines) {
     const id = current[line[0]].id;
@@ -167,9 +199,11 @@ function evaluateWin() {
     else if (id === "king" || id === "yellow" || id === "blue") multiplier += 9;
     else multiplier += 7;
   }
+
   const diag1 = lines.some(line => line.join(",") === "0,4,8");
   const diag2 = lines.some(line => line.join(",") === "2,4,6");
   if (diag1 && diag2) multiplier += 12;
+
   return { win: bet * multiplier, lines };
 }
 
@@ -187,6 +221,7 @@ function drawLines() {
   resizeCanvas();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!winningLines.length) return;
+
   const w = canvas.width;
   const h = canvas.height;
   const centers = [
@@ -194,11 +229,13 @@ function drawLines() {
     [w * 1/6, h * 3/6], [w * 3/6, h * 3/6], [w * 5/6, h * 3/6],
     [w * 1/6, h * 5/6], [w * 3/6, h * 5/6], [w * 5/6, h * 5/6]
   ];
+
   ctx.lineWidth = Math.max(7, w * 0.016);
   ctx.lineCap = "round";
   ctx.strokeStyle = "rgba(255,216,115,.95)";
   ctx.shadowColor = "rgba(255,79,216,.95)";
   ctx.shadowBlur = 16;
+
   for (const line of winningLines) {
     ctx.beginPath();
     const [first, ...rest] = line;
@@ -210,9 +247,8 @@ function drawLines() {
 
 async function saveLeaderboard() {
   const name = cleanName(playerNameEl.value);
-  localStorage.setItem(`${STORAGE_PREFIX}Name`, name);
 
-  const localList = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}Leaderboard`) || "[]");
+  const localList = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}:leaderboard`) || "[]");
   const index = localList.findIndex(item => item.name.toLowerCase() === name.toLowerCase());
   const entry = { name, score, credits, lastWin, date: new Date().toISOString() };
   if (index >= 0) {
@@ -221,7 +257,7 @@ async function saveLeaderboard() {
     localList.push(entry);
   }
   localList.sort((a, b) => b.score - a.score || b.credits - a.credits);
-  localStorage.setItem(`${STORAGE_PREFIX}Leaderboard`, JSON.stringify(localList.slice(0, 10)));
+  localStorage.setItem(`${STORAGE_PREFIX}:leaderboard`, JSON.stringify(localList.slice(0, 10)));
 
   if (!hasSupabase) return;
   try {
@@ -296,7 +332,9 @@ async function getGlobalLeaderboard() {
         bestByName.set(key, row);
       }
     }
-    return Array.from(bestByName.values()).sort((a,b) => Number(b.score) - Number(a.score) || Number(b.credits) - Number(a.credits)).slice(0, 25);
+    return Array.from(bestByName.values())
+      .sort((a,b) => Number(b.score) - Number(a.score) || Number(b.credits) - Number(a.credits))
+      .slice(0, 25);
   } catch (error) {
     console.warn(error);
     return null;
@@ -314,15 +352,13 @@ async function renderLeaderboard() {
     });
     return;
   }
-  if (hasSupabase && globalList && !globalList.length) {
-    leaderboardEl.innerHTML = "<li>No global wins yet. Be first.</li>";
-    return;
-  }
-  const localList = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}Leaderboard`) || "[]");
+
+  const localList = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}:leaderboard`) || "[]");
   if (!localList.length) {
     leaderboardEl.innerHTML = hasSupabase ? "<li>Global leaderboard is connected. No wins yet.</li>" : "<li>No wins yet. Be first.</li>";
     return;
   }
+
   localList.forEach(item => {
     const li = document.createElement("li");
     li.textContent = `${item.name} · ${item.score.toLocaleString("en-US")} pts · ${item.credits.toLocaleString("en-US")} credits left`;
@@ -340,13 +376,7 @@ function changeBet(direction) {
 }
 
 function resetGame() {
-  credits = STARTING_CREDITS;
-  score = 0;
-  lastWin = 0;
-  winningLines = [];
-  messageEl.textContent = "New run started. Starting credits: 10,000. Winnings add to score, not credits.";
-  updateUI();
-  renderGrid();
+  messageEl.textContent = "Reset/refill is disabled in challenge mode. Change X username only if this is a different player.";
 }
 
 function shareOnX() {
@@ -358,7 +388,7 @@ function shareOnX() {
 spinBtn.addEventListener("click", spin);
 minusBet.addEventListener("click", () => changeBet(-1));
 plusBet.addEventListener("click", () => changeBet(1));
-resetBtn.addEventListener("click", resetGame);
+if (resetBtn) resetBtn.addEventListener("click", resetGame);
 if (clearBoardBtn) {
   clearBoardBtn.disabled = true;
   clearBoardBtn.textContent = "LOCKED";
@@ -369,13 +399,13 @@ if (clearBoardBtn) {
 }
 shareBtn.addEventListener("click", shareOnX);
 window.addEventListener("resize", drawLines);
-playerNameEl.addEventListener("change", () => {
-  localStorage.setItem(`${STORAGE_PREFIX}Name`, cleanName(playerNameEl.value));
-});
+playerNameEl.addEventListener("change", () => loadPlayerState(true));
+playerNameEl.addEventListener("blur", () => loadPlayerState(false));
 
-const savedName = localStorage.getItem(`${STORAGE_PREFIX}Name`) || localStorage.getItem("slotV4Name");
+const savedName = localStorage.getItem(`${STORAGE_PREFIX}:activeName`) || localStorage.getItem("slotV7Name") || localStorage.getItem("slotV4Name") || "";
 if (savedName) playerNameEl.value = savedName;
 
+loadPlayerState(false);
 createGrid();
 updateUI();
 renderLeaderboard();
