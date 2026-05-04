@@ -87,6 +87,49 @@ body:before{
   text-shadow:0 0 14px rgba(255,255,255,.16);
 }
 
+.challenge-rules{
+  max-width:900px;
+  margin:0 auto 16px;
+  padding:16px 18px;
+  border:1px solid var(--line);
+  border-radius:24px;
+  background:rgba(20,9,31,.88);
+  box-shadow:0 18px 45px rgba(0,0,0,.28), inset 0 0 22px rgba(255,79,216,.05);
+  text-align:center;
+}
+
+.challenge-rules h2{
+  margin:0 0 8px;
+  color:#ff8eed;
+  font-size:28px;
+}
+
+.challenge-rules p{
+  margin:8px 0;
+  color:rgba(255,255,255,.78);
+}
+
+.rules-grid{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:8px;
+  margin:14px 0;
+}
+
+.rules-grid span{
+  padding:10px;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:14px;
+  background:rgba(255,255,255,.08);
+  font-weight:900;
+  font-size:14px;
+}
+
+.prize-note{
+  color:#ffd873 !important;
+  font-weight:1000;
+}
+
 .layout{
   display:grid;
   grid-template-columns:220px 1fr 240px;
@@ -512,6 +555,7 @@ footer{
   .spin-box{grid-column:1/-1; order:-1}
   .spin-btn{width:150px;height:150px;font-size:36px}
   .sound-box,.util-box{display:none}
+  .rules-grid{grid-template-columns:1fr}
 }
 
 @media(max-width:520px){
@@ -521,4 +565,5 @@ footer{
   .title-main{font-size:68px}
   .title-sub{font-size:32px}
   .message{font-size:18px}
+  .challenge-rules h2{font-size:22px}
 }
