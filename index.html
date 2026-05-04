@@ -42,7 +42,7 @@
       <section class="machine">
         <div class="machine-topline">SPIN TO WIN <b>10K</b> GOOD VIBES</div>
 
-        <div id="message" class="message">Ready. Hit spin.</div>
+        <div id="message" class="message">Challenge mode: 10,000 credits only. No reset. Best score wins.</div>
 
         <div class="board-wrap">
           <div id="slotGrid" class="slot-grid"></div>
@@ -69,7 +69,7 @@
 
           <div class="spin-box">
             <button id="spinBtn" class="spin-btn">Spin</button>
-            <small>Hold for auto</small>
+            <small>Best run counts</small>
           </div>
 
           <div class="info-box">
@@ -79,7 +79,7 @@
           </div>
 
           <div class="info-box util-box">
-            <button id="resetBtn" class="reset-btn">INFO<br>RESET</button>
+            <button id="resetBtn" class="reset-btn">INFO<br>ONLY</button>
           </div>
         </div>
 
@@ -122,10 +122,27 @@
       <button id="shareBtn" class="outline-btn wide">Share on X</button>
     </section>
 
-    <footer>For community fun only. No real money, no betting, no payouts.</footer>
+    <footer>Challenge mode: 10,000 credits only. No reset during the NFT challenge. One X name per player. Fake/spam entries may be removed.</footer>
   </main>
 
   <script src="config.js"></script>
   <script src="script.js"></script>
+  <script>
+    window.addEventListener('load', function () {
+      const oldReset = document.getElementById('resetBtn');
+      const message = document.getElementById('message');
+      if (!oldReset) return;
+      const infoOnly = oldReset.cloneNode(true);
+      infoOnly.id = 'resetBtnInfoOnly';
+      infoOnly.innerHTML = 'INFO<br>ONLY';
+      infoOnly.title = 'Reset is disabled in challenge mode.';
+      oldReset.parentNode.replaceChild(infoOnly, oldReset);
+      infoOnly.addEventListener('click', function () {
+        if (message) {
+          message.textContent = 'Challenge mode: no reset. You have one 10,000-credit run. Best score stays on the leaderboard.';
+        }
+      });
+    });
+  </script>
 </body>
 </html>
