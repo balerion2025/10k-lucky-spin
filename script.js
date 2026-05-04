@@ -18,7 +18,7 @@ const machine = document.querySelector(".machine");
 const cfg = window.SLOT_CONFIG || {};
 const hasSupabase = Boolean(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
 const STARTING_CREDITS = 10000;
-const STORAGE_PREFIX = "slotV11";
+const STORAGE_PREFIX = "slotV12";
 
 function supabaseHeaders(includeJson = false) {
   const headers = { "apikey": cfg.SUPABASE_ANON_KEY };
@@ -69,13 +69,11 @@ function loadPlayerState(showMessage = false) {
   const name = cleanName(playerNameEl.value);
   activeName = name;
   localStorage.setItem(`${STORAGE_PREFIX}:activeName`, name);
-
   credits = Number(localStorage.getItem(playerKey(name, "credits")) || STARTING_CREDITS);
   score = Number(localStorage.getItem(playerKey(name, "score")) || 0);
   lastWin = 0;
   winningLines = [];
   updateUI();
-
   if (showMessage) {
     messageEl.textContent = `${name} loaded. ${credits.toLocaleString("en-US")} credits available.`;
   }
@@ -142,6 +140,7 @@ function spin() {
 
   if (isGameOver()) {
     messageEl.textContent = `GAME OVER for ${currentName}. Final score: ${score.toLocaleString("en-US")}. No reset/refill in challenge mode.`;
+    saveLeaderboard().then(renderLeaderboard);
     return;
   }
 
@@ -181,7 +180,6 @@ async function finishSpin() {
     messageEl.textContent = isGameOver()
       ? `WIN +${lastWin.toLocaleString("en-US")} credits! GAME OVER. Final score: ${score.toLocaleString("en-US")}.`
       : `WIN! ${result.lines.length} line(s) · +${lastWin.toLocaleString("en-US")} credits`;
-    await saveLeaderboard();
   } else {
     messageEl.textContent = isGameOver()
       ? `No line. GAME OVER. Final score: ${score.toLocaleString("en-US")}. No reset/refill in challenge mode.`
@@ -190,6 +188,7 @@ async function finishSpin() {
 
   renderGrid();
   updateUI();
+  await saveLeaderboard();
   await renderLeaderboard();
   spinning = false;
 }
@@ -198,9 +197,7 @@ function evaluateWin() {
   const lines = [];
   for (const line of paylines) {
     const [a, b, c] = line;
-    if (current[a].id === current[b].id && current[b].id === current[c].id) {
-      lines.push(line);
-    }
+    if (current[a].id === current[b].id && current[b].id === current[c].id) lines.push(line);
   }
   if (!lines.length) return { win: 0, lines: [] };
 
@@ -215,7 +212,6 @@ function evaluateWin() {
   const diag1 = lines.some(line => line.join(",") === "0,4,8");
   const diag2 = lines.some(line => line.join(",") === "2,4,6");
   if (diag1 && diag2) multiplier += 12;
-
   return { win: bet * multiplier, lines };
 }
 
@@ -259,12 +255,13 @@ function drawLines() {
 
 async function saveLeaderboard() {
   const name = cleanName(playerNameEl.value);
+  if (score <= 0) return;
 
   const localList = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}:leaderboard`) || "[]");
   const index = localList.findIndex(item => item.name.toLowerCase() === name.toLowerCase());
   const entry = { name, score, credits, lastWin, date: new Date().toISOString() };
   if (index >= 0) {
-    if (score > localList[index].score) localList[index] = entry;
+    if (score >= Number(localList[index].score || 0)) localList[index] = entry;
   } else {
     localList.push(entry);
   }
@@ -274,7 +271,7 @@ async function saveLeaderboard() {
   if (!hasSupabase) return;
   try {
     const existing = await getPlayerGlobalScore(name);
-    if (existing && Number(existing.score) >= score) return;
+    if (existing && Number(existing.score) > score) return;
 
     const payload = JSON.stringify({ name, score, credits, last_win: lastWin });
     const url = existing
@@ -342,6 +339,8 @@ async function getGlobalLeaderboard() {
     for (const row of rows) {
       const key = String(row.name).toLowerCase();
       if (!bestByName.has(key) || Number(row.score) > Number(bestByName.get(key).score)) {
+        bestByName.set(key, row);
+      } else if (bestByName.has(key) && Number(row.score) === Number(bestByName.get(key).score) && Number(row.credits) < Number(bestByName.get(key).credits)) {
         bestByName.set(key, row);
       }
     }
@@ -427,7 +426,7 @@ window.addEventListener("resize", drawLines);
 playerNameEl.addEventListener("change", () => loadPlayerState(true));
 playerNameEl.addEventListener("blur", () => loadPlayerState(false));
 
-const savedName = localStorage.getItem(`${STORAGE_PREFIX}:activeName`) || localStorage.getItem("slotV10:activeName") || localStorage.getItem("slotV9:activeName") || localStorage.getItem("slotV8:activeName") || localStorage.getItem("slotV7Name") || localStorage.getItem("slotV4Name") || "";
+const savedName = localStorage.getItem(`${STORAGE_PREFIX}:activeName`) || localStorage.getItem("slotV11:activeName") || localStorage.getItem("slotV10:activeName") || localStorage.getItem("slotV9:activeName") || localStorage.getItem("slotV8:activeName") || localStorage.getItem("slotV7Name") || localStorage.getItem("slotV4Name") || "";
 if (savedName) playerNameEl.value = savedName;
 
 loadPlayerState(false);
