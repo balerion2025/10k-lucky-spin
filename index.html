@@ -136,10 +136,79 @@
       <button id="shareBtn" class="outline-btn wide">Share on X</button>
     </section>
 
-    <footer>Challenge mode: start with 10,000 credits. Wins add credits and score. No reset or refill during the NFT challenge. Use your real X username. The winner must verify X account ownership before receiving the NFT. Fake, spam, duplicate, or suspicious entries may be removed. For community fun only. No real money, no betting, no payouts. Version: global-debug-v12.</footer>
+    <footer>Challenge mode: start with 10,000 credits. Wins add credits and score. No reset or refill during the NFT challenge. Use your real X username. The winner must verify X account ownership before receiving the NFT. Fake, spam, duplicate, or suspicious entries may be removed. For community fun only. No real money, no betting, no payouts. Version: global-debug-v13.</footer>
   </main>
 
-  <script src="config.js?v=12"></script>
-  <script src="script.js?v=12"></script>
+  <script src="config.js?v=13"></script>
+  <script src="script.js?v=13"></script>
+  <script>
+    window.addEventListener('load', function () {
+      const soundBox = document.querySelector('.sound-box');
+      const message = document.getElementById('message');
+      let audioCtx = null;
+      let musicTimer = null;
+      let musicOn = false;
+      let step = 0;
+      const notes = [196, 246.94, 293.66, 329.63, 392, 329.63, 293.66, 246.94];
+
+      function ensureAudio() {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+      }
+
+      function tone(freq, duration, type = 'triangle', volume = 0.035) {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(volume, audioCtx.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration + 0.03);
+      }
+
+      function startMusic() {
+        ensureAudio();
+        if (musicTimer) clearInterval(musicTimer);
+        musicOn = true;
+        if (soundBox) soundBox.textContent = '🔊';
+        if (message) message.textContent = 'Sound on. 10K arcade vibe activated.';
+        musicTimer = setInterval(function () {
+          tone(notes[step % notes.length], 0.18, 'triangle', 0.025);
+          if (step % 4 === 0) tone(98, 0.12, 'sine', 0.015);
+          step++;
+        }, 260);
+      }
+
+      function stopMusic() {
+        musicOn = false;
+        if (musicTimer) clearInterval(musicTimer);
+        musicTimer = null;
+        if (soundBox) soundBox.textContent = '🔇';
+        if (message) message.textContent = 'Sound off.';
+      }
+
+      window.playWinSound = function () {
+        if (!musicOn) return;
+        ensureAudio();
+        [523.25, 659.25, 783.99, 1046.5].forEach(function (freq, i) {
+          setTimeout(function () { tone(freq, 0.16, 'square', 0.04); }, i * 85);
+        });
+      };
+
+      if (soundBox) {
+        soundBox.style.cursor = 'pointer';
+        soundBox.title = 'Toggle music';
+        soundBox.addEventListener('click', function () {
+          if (musicOn) stopMusic();
+          else startMusic();
+        });
+      }
+    });
+  </script>
 </body>
 </html>
