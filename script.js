@@ -26,9 +26,6 @@ const symbols = [
   { id:"logo", img:"images/project-logo.jpg", name:"Project Logo", weight:13, logo:true }
 ];
 
-// IMPORTANT: the full UI reference image is NOT included in the spin symbols.
-// It is only used as style inspiration for the interface.
-
 const paylines = [
   [0,1,2], [3,4,5], [6,7,8],
   [0,3,6], [1,4,7], [2,5,8],
@@ -271,10 +268,14 @@ spinBtn.addEventListener("click", spin);
 minusBet.addEventListener("click", () => changeBet(-1));
 plusBet.addEventListener("click", () => changeBet(1));
 resetBtn.addEventListener("click", resetGame);
-clearBoardBtn.addEventListener("click", () => {
-  localStorage.removeItem("slotV4Leaderboard");
-  renderLeaderboard();
-});
+if (clearBoardBtn) {
+  clearBoardBtn.disabled = true;
+  clearBoardBtn.textContent = "LOCKED";
+  clearBoardBtn.title = "Leaderboard deletion is disabled.";
+  clearBoardBtn.addEventListener("click", () => {
+    messageEl.textContent = "Leaderboard is locked. Scores cannot be deleted.";
+  });
+}
 shareBtn.addEventListener("click", shareOnX);
 window.addEventListener("resize", drawLines);
 playerNameEl.addEventListener("change", () => {
