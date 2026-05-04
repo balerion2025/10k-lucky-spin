@@ -18,14 +18,14 @@ const machine = document.querySelector(".machine");
 const cfg = window.SLOT_CONFIG || {};
 const hasSupabase = Boolean(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
 const STARTING_CREDITS = 10000;
-const STORAGE_PREFIX = "slotV8";
+const STORAGE_PREFIX = "slotV9";
 
 function supabaseHeaders(includeJson = false) {
-  const headers = { "apikey": cfg.SUPABASE_ANON_KEY };
+  const headers = {
+    "apikey": cfg.SUPABASE_ANON_KEY,
+    "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`
+  };
   if (includeJson) headers["Content-Type"] = "application/json";
-  if (!String(cfg.SUPABASE_ANON_KEY).startsWith("sb_publishable_")) {
-    headers["Authorization"] = `Bearer ${cfg.SUPABASE_ANON_KEY}`;
-  }
   return headers;
 }
 
@@ -54,6 +54,8 @@ let spinning = false;
 let lastWin = 0;
 let winningLines = [];
 let activeName = "";
+let globalOnline = false;
+let lastGlobalError = "";
 
 function cleanName(name) {
   return (name || "Anon").replace(/[^\w .@-]/g, "").slice(0, 18) || "Anon";
@@ -175,6 +177,7 @@ async function finishSpin() {
     credits += lastWin;
     score += lastWin;
     machine.classList.add("flash");
+    if (window.playWinSound) window.playWinSound();
     messageEl.textContent = isGameOver()
       ? `WIN +${lastWin.toLocaleString("en-US")} credits! GAME OVER. Final score: ${score.toLocaleString("en-US")}.`
       : `WIN! ${result.lines.length} line(s) · +${lastWin.toLocaleString("en-US")} credits`;
@@ -273,31 +276,33 @@ async function saveLeaderboard() {
     const existing = await getPlayerGlobalScore(name);
     if (existing && Number(existing.score) >= score) return;
 
-    if (existing) {
-      const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?id=eq.${existing.id}`, {
-        method: "PATCH",
-        headers: {
-          ...supabaseHeaders(true),
-          "Prefer": "return=minimal"
-        },
-        body: JSON.stringify({ score, credits, last_win: lastWin })
-      });
-      if (!response.ok) throw new Error("Global update failed");
-      return;
-    }
+    const payload = JSON.stringify({ name, score, credits, last_win: lastWin });
+    const url = existing
+      ? `${cfg.SUPABASE_URL}/rest/v1/slot_scores?id=eq.${existing.id}`
+      : `${cfg.SUPABASE_URL}/rest/v1/slot_scores`;
+    const method = existing ? "PATCH" : "POST";
 
-    const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores`, {
-      method: "POST",
+    const response = await fetch(url, {
+      method,
       headers: {
         ...supabaseHeaders(true),
         "Prefer": "return=minimal"
       },
-      body: JSON.stringify({ name, score, credits, last_win: lastWin })
+      body: payload
     });
-    if (!response.ok) throw new Error("Global save failed");
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`${method} ${response.status}: ${text}`);
+    }
+
+    globalOnline = true;
+    lastGlobalError = "";
   } catch (error) {
-    console.warn(error);
-    messageEl.textContent = "Local score saved. Global leaderboard save/update failed.";
+    globalOnline = false;
+    lastGlobalError = String(error.message || error);
+    console.warn("Global leaderboard save/update failed:", error);
+    messageEl.textContent = `Local saved. GLOBAL failed: ${lastGlobalError.slice(0, 90)}`;
   }
 }
 
@@ -307,11 +312,15 @@ async function getPlayerGlobalScore(name) {
     const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?select=id,name,score,credits,last_win&name=eq.${encodeURIComponent(name)}&order=score.desc&limit=1`, {
       headers: supabaseHeaders(false)
     });
-    if (!response.ok) throw new Error("Player score load failed");
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`GET PLAYER ${response.status}: ${text}`);
+    }
     const data = await response.json();
     return data[0] || null;
   } catch (error) {
-    console.warn(error);
+    lastGlobalError = String(error.message || error);
+    console.warn("Player score load failed:", error);
     return null;
   }
 }
@@ -322,8 +331,13 @@ async function getGlobalLeaderboard() {
     const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?select=name,score,credits,last_win,created_at&order=score.desc&order=credits.desc&limit=100`, {
       headers: supabaseHeaders(false)
     });
-    if (!response.ok) throw new Error("Global leaderboard load failed");
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`GET GLOBAL ${response.status}: ${text}`);
+    }
     const rows = await response.json();
+    globalOnline = true;
+    lastGlobalError = "";
     const bestByName = new Map();
     for (const row of rows) {
       const key = String(row.name).toLowerCase();
@@ -335,7 +349,9 @@ async function getGlobalLeaderboard() {
       .sort((a,b) => Number(b.score) - Number(a.score) || Number(b.credits) - Number(a.credits))
       .slice(0, 25);
   } catch (error) {
-    console.warn(error);
+    globalOnline = false;
+    lastGlobalError = String(error.message || error);
+    console.warn("Global leaderboard load failed:", error);
     return null;
   }
 }
@@ -352,9 +368,19 @@ async function renderLeaderboard() {
     return;
   }
 
+  if (globalOnline && globalList && !globalList.length) {
+    leaderboardEl.innerHTML = "<li>Global leaderboard is online. No global wins yet.</li>";
+    return;
+  }
+
+  if (!globalOnline && hasSupabase) {
+    leaderboardEl.innerHTML = `<li>GLOBAL OFFLINE / BLOCKED: ${lastGlobalError.slice(0, 120)}</li>`;
+    return;
+  }
+
   const localList = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}:leaderboard`) || "[]");
   if (!localList.length) {
-    leaderboardEl.innerHTML = hasSupabase ? "<li>Global leaderboard connected, but no global wins yet.</li>" : "<li>No wins yet. Be first.</li>";
+    leaderboardEl.innerHTML = "<li>No wins yet. Be first.</li>";
     return;
   }
 
@@ -401,7 +427,7 @@ window.addEventListener("resize", drawLines);
 playerNameEl.addEventListener("change", () => loadPlayerState(true));
 playerNameEl.addEventListener("blur", () => loadPlayerState(false));
 
-const savedName = localStorage.getItem(`${STORAGE_PREFIX}:activeName`) || localStorage.getItem("slotV7Name") || localStorage.getItem("slotV4Name") || "";
+const savedName = localStorage.getItem(`${STORAGE_PREFIX}:activeName`) || localStorage.getItem("slotV8:activeName") || localStorage.getItem("slotV7Name") || localStorage.getItem("slotV4Name") || "";
 if (savedName) playerNameEl.value = savedName;
 
 loadPlayerState(false);
