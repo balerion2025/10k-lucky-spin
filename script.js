@@ -17,6 +17,8 @@ const machine = document.querySelector(".machine");
 
 const cfg = window.SLOT_CONFIG || {};
 const hasSupabase = Boolean(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
+const STARTING_CREDITS = 10000;
+const STORAGE_PREFIX = "slotV7";
 
 const symbols = [
   { id:"yellow", img:"images/yellow-owl.png", name:"Yellow Owl", weight:12 },
@@ -35,9 +37,9 @@ const paylines = [
   [0,4,8], [2,4,6]
 ];
 
-let credits = Number(localStorage.getItem("slotV4Credits") || 10000);
-let score = Number(localStorage.getItem("slotV4Score") || 0);
-let bet = Number(localStorage.getItem("slotV4Bet") || 100);
+let credits = Number(localStorage.getItem(`${STORAGE_PREFIX}Credits`) || STARTING_CREDITS);
+let score = Number(localStorage.getItem(`${STORAGE_PREFIX}Score`) || 0);
+let bet = Number(localStorage.getItem(`${STORAGE_PREFIX}Bet`) || 100);
 let current = [];
 let spinning = false;
 let lastWin = 0;
@@ -81,21 +83,26 @@ function updateUI() {
   creditsEl.textContent = credits.toLocaleString("en-US");
   betDisplay.textContent = bet.toLocaleString("en-US");
   winEl.textContent = lastWin.toLocaleString("en-US");
-  localStorage.setItem("slotV4Credits", credits);
-  localStorage.setItem("slotV4Score", score);
-  localStorage.setItem("slotV4Bet", bet);
+  localStorage.setItem(`${STORAGE_PREFIX}Credits`, credits);
+  localStorage.setItem(`${STORAGE_PREFIX}Score`, score);
+  localStorage.setItem(`${STORAGE_PREFIX}Bet`, bet);
 }
 
 function cleanName(name) {
   return (name || "Anon").replace(/[^\w .@-]/g, "").slice(0, 18) || "Anon";
 }
 
+function isGameOver() {
+  return credits < bet;
+}
+
 function spin() {
   if (spinning) return;
-  if (credits < bet) {
-    messageEl.textContent = `Game over. Your best run score is ${score.toLocaleString("en-US")}. Hit RESET to start a new run.`;
+  if (isGameOver()) {
+    messageEl.textContent = `GAME OVER. Final run score: ${score.toLocaleString("en-US")}. Hit RESET to start a new run.`;
     return;
   }
+
   spinning = true;
   lastWin = 0;
   winningLines = [];
@@ -104,6 +111,7 @@ function spin() {
   machine.classList.remove("flash");
   messageEl.textContent = "Spinning...";
   Array.from(gridEl.children).forEach(cell => cell.classList.add("spinning"));
+
   let ticks = 0;
   const interval = setInterval(() => {
     current = Array.from({length: 9}, () => weightedRandom());
@@ -122,17 +130,21 @@ async function finishSpin() {
   const result = evaluateWin();
   winningLines = result.lines;
   lastWin = result.win;
+
   if (lastWin > 0) {
-    credits += lastWin;
+    // Prize credits do NOT refill the run budget. They only increase the run score.
     score += lastWin;
     machine.classList.add("flash");
-    messageEl.textContent = `WIN! ${result.lines.length} line(s) · +${lastWin.toLocaleString("en-US")}`;
+    messageEl.textContent = isGameOver()
+      ? `WIN +${lastWin.toLocaleString("en-US")}! GAME OVER. Final run score: ${score.toLocaleString("en-US")}.`
+      : `WIN! ${result.lines.length} line(s) · +${lastWin.toLocaleString("en-US")}`;
     await saveLeaderboard();
   } else {
-    messageEl.textContent = credits < bet
-      ? `No line. Game over. Best run score: ${score.toLocaleString("en-US")}. Hit RESET for a new run.`
+    messageEl.textContent = isGameOver()
+      ? `No line. GAME OVER. Final run score: ${score.toLocaleString("en-US")}. Hit RESET for a new run.`
       : "No line. Spin again.";
   }
+
   renderGrid();
   updateUI();
   await renderLeaderboard();
@@ -198,8 +210,9 @@ function drawLines() {
 
 async function saveLeaderboard() {
   const name = cleanName(playerNameEl.value);
-  localStorage.setItem("slotV4Name", name);
-  const localList = JSON.parse(localStorage.getItem("slotV4Leaderboard") || "[]");
+  localStorage.setItem(`${STORAGE_PREFIX}Name`, name);
+
+  const localList = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}Leaderboard`) || "[]");
   const index = localList.findIndex(item => item.name.toLowerCase() === name.toLowerCase());
   const entry = { name, score, credits, lastWin, date: new Date().toISOString() };
   if (index >= 0) {
@@ -208,11 +221,13 @@ async function saveLeaderboard() {
     localList.push(entry);
   }
   localList.sort((a, b) => b.score - a.score || b.credits - a.credits);
-  localStorage.setItem("slotV4Leaderboard", JSON.stringify(localList.slice(0, 10)));
+  localStorage.setItem(`${STORAGE_PREFIX}Leaderboard`, JSON.stringify(localList.slice(0, 10)));
+
   if (!hasSupabase) return;
   try {
     const existing = await getPlayerGlobalScore(name);
     if (existing && Number(existing.score) >= score) return;
+
     if (existing) {
       const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?id=eq.${existing.id}`, {
         method: "PATCH",
@@ -227,6 +242,7 @@ async function saveLeaderboard() {
       if (!response.ok) throw new Error("Global update failed");
       return;
     }
+
     const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores`, {
       method: "POST",
       headers: {
@@ -265,7 +281,7 @@ async function getPlayerGlobalScore(name) {
 async function getGlobalLeaderboard() {
   if (!hasSupabase) return null;
   try {
-    const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?select=name,score,credits,last_win,created_at&order=score.desc&order=credits.desc&limit=25`, {
+    const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?select=name,score,credits,last_win,created_at&order=score.desc&order=credits.desc&limit=100`, {
       headers: {
         "apikey": cfg.SUPABASE_ANON_KEY,
         "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`
@@ -293,7 +309,7 @@ async function renderLeaderboard() {
   if (globalList && globalList.length) {
     globalList.forEach(item => {
       const li = document.createElement("li");
-      li.textContent = `${item.name} · ${Number(item.score).toLocaleString("en-US")} pts · ${Number(item.credits).toLocaleString("en-US")} credits`;
+      li.textContent = `${item.name} · ${Number(item.score).toLocaleString("en-US")} pts · ${Number(item.credits).toLocaleString("en-US")} credits left`;
       leaderboardEl.appendChild(li);
     });
     return;
@@ -302,14 +318,14 @@ async function renderLeaderboard() {
     leaderboardEl.innerHTML = "<li>No global wins yet. Be first.</li>";
     return;
   }
-  const localList = JSON.parse(localStorage.getItem("slotV4Leaderboard") || "[]");
+  const localList = JSON.parse(localStorage.getItem(`${STORAGE_PREFIX}Leaderboard`) || "[]");
   if (!localList.length) {
     leaderboardEl.innerHTML = hasSupabase ? "<li>Global leaderboard is connected. No wins yet.</li>" : "<li>No wins yet. Be first.</li>";
     return;
   }
   localList.forEach(item => {
     const li = document.createElement("li");
-    li.textContent = `${item.name} · ${item.score.toLocaleString("en-US")} pts · ${item.credits.toLocaleString("en-US")} credits`;
+    li.textContent = `${item.name} · ${item.score.toLocaleString("en-US")} pts · ${item.credits.toLocaleString("en-US")} credits left`;
     leaderboardEl.appendChild(li);
   });
 }
@@ -324,18 +340,18 @@ function changeBet(direction) {
 }
 
 function resetGame() {
-  credits = 10000;
+  credits = STARTING_CREDITS;
   score = 0;
   lastWin = 0;
   winningLines = [];
-  messageEl.textContent = "New run started. Best leaderboard score stays locked.";
+  messageEl.textContent = "New run started. Starting credits: 10,000. Winnings add to score, not credits.";
   updateUI();
   renderGrid();
 }
 
 function shareOnX() {
   const name = cleanName(playerNameEl.value);
-  const text = `I just played 10K Lucky Spin as ${name} and scored ${score.toLocaleString("en-US")} points. Match 3 on horizontal, vertical, or diagonal lines. 10K community fun only.`;
+  const text = `I just played 10K Lucky Spin as ${name} and scored ${score.toLocaleString("en-US")} points. Best run counts. 10K community fun only.`;
   window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank");
 }
 
@@ -354,10 +370,10 @@ if (clearBoardBtn) {
 shareBtn.addEventListener("click", shareOnX);
 window.addEventListener("resize", drawLines);
 playerNameEl.addEventListener("change", () => {
-  localStorage.setItem("slotV4Name", cleanName(playerNameEl.value));
+  localStorage.setItem(`${STORAGE_PREFIX}Name`, cleanName(playerNameEl.value));
 });
 
-const savedName = localStorage.getItem("slotV4Name");
+const savedName = localStorage.getItem(`${STORAGE_PREFIX}Name`) || localStorage.getItem("slotV4Name");
 if (savedName) playerNameEl.value = savedName;
 
 createGrid();
