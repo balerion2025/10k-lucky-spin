@@ -15,6 +15,9 @@ const clearBoardBtn = document.getElementById("clearBoard");
 const shareBtn = document.getElementById("shareBtn");
 const machine = document.querySelector(".machine");
 
+const cfg = window.SLOT_CONFIG || {};
+const hasSupabase = Boolean(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
+
 const symbols = [
   { id:"yellow", img:"images/yellow-owl.png", name:"Yellow Owl", weight:12 },
   { id:"blue", img:"images/blue-pirate-owl.png", name:"Blue Pirate Owl", weight:12 },
@@ -118,7 +121,7 @@ function spin() {
   }, 95);
 }
 
-function finishSpin() {
+async function finishSpin() {
   Array.from(gridEl.children).forEach(cell => cell.classList.remove("spinning"));
   current = Array.from({length: 9}, () => weightedRandom());
 
@@ -131,14 +134,14 @@ function finishSpin() {
     score += lastWin;
     machine.classList.add("flash");
     messageEl.textContent = `WIN! ${result.lines.length} line(s) · +${lastWin.toLocaleString("en-US")}`;
-    saveLeaderboard();
+    await saveLeaderboard();
   } else {
     messageEl.textContent = "No line. Spin again.";
   }
 
   renderGrid();
   updateUI();
-  renderLeaderboard();
+  await renderLeaderboard();
   spinning = false;
 }
 
@@ -207,32 +210,98 @@ function drawLines() {
   }
 }
 
-function saveLeaderboard() {
+async function saveLeaderboard() {
   const name = cleanName(playerNameEl.value);
   localStorage.setItem("slotV4Name", name);
 
-  const list = JSON.parse(localStorage.getItem("slotV4Leaderboard") || "[]");
-  const index = list.findIndex(item => item.name.toLowerCase() === name.toLowerCase());
-  const entry = { name, score, credits, date: new Date().toISOString() };
+  const localList = JSON.parse(localStorage.getItem("slotV4Leaderboard") || "[]");
+  const index = localList.findIndex(item => item.name.toLowerCase() === name.toLowerCase());
+  const entry = { name, score, credits, lastWin, date: new Date().toISOString() };
 
   if (index >= 0) {
-    if (score > list[index].score) list[index] = entry;
+    if (score > localList[index].score) localList[index] = entry;
   } else {
-    list.push(entry);
+    localList.push(entry);
   }
 
-  list.sort((a, b) => b.score - a.score || b.credits - a.credits);
-  localStorage.setItem("slotV4Leaderboard", JSON.stringify(list.slice(0, 10)));
+  localList.sort((a, b) => b.score - a.score || b.credits - a.credits);
+  localStorage.setItem("slotV4Leaderboard", JSON.stringify(localList.slice(0, 10)));
+
+  if (!hasSupabase) return;
+
+  try {
+    const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores`, {
+      method: "POST",
+      headers: {
+        "apikey": cfg.SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({
+        name,
+        score,
+        credits,
+        last_win: lastWin
+      })
+    });
+
+    if (!response.ok) throw new Error("Global save failed");
+  } catch (error) {
+    console.warn(error);
+    messageEl.textContent = "Local score saved. Global leaderboard save failed.";
+  }
 }
 
-function renderLeaderboard() {
-  const list = JSON.parse(localStorage.getItem("slotV4Leaderboard") || "[]");
+async function getGlobalLeaderboard() {
+  if (!hasSupabase) return null;
+
+  try {
+    const response = await fetch(
+      `${cfg.SUPABASE_URL}/rest/v1/slot_scores?select=name,score,credits,last_win,created_at&order=score.desc&order=credits.desc&limit=25`,
+      {
+        headers: {
+          "apikey": cfg.SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`
+        }
+      }
+    );
+
+    if (!response.ok) throw new Error("Global leaderboard load failed");
+    return await response.json();
+  } catch (error) {
+    console.warn(error);
+    return null;
+  }
+}
+
+async function renderLeaderboard() {
   leaderboardEl.innerHTML = "";
-  if (!list.length) {
-    leaderboardEl.innerHTML = "<li>No wins yet. Be first.</li>";
+
+  const globalList = await getGlobalLeaderboard();
+  if (globalList && globalList.length) {
+    globalList.forEach(item => {
+      const li = document.createElement("li");
+      li.textContent = `${item.name} · ${Number(item.score).toLocaleString("en-US")} pts · ${Number(item.credits).toLocaleString("en-US")} credits`;
+      leaderboardEl.appendChild(li);
+    });
     return;
   }
-  list.forEach(item => {
+
+  if (hasSupabase && globalList && !globalList.length) {
+    leaderboardEl.innerHTML = "<li>No global wins yet. Be first.</li>";
+    return;
+  }
+
+  const localList = JSON.parse(localStorage.getItem("slotV4Leaderboard") || "[]");
+  if (!localList.length) {
+    leaderboardEl.innerHTML = hasSupabase
+      ? "<li>Global leaderboard is connected. No wins yet.</li>"
+      : "<li>No wins yet. Be first.</li>";
+    return;
+  }
+
+  localList.forEach(item => {
     const li = document.createElement("li");
     li.textContent = `${item.name} · ${item.score.toLocaleString("en-US")} pts · ${item.credits.toLocaleString("en-US")} credits`;
     leaderboardEl.appendChild(li);
