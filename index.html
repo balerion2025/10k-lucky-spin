@@ -17,6 +17,20 @@
       <div class="hero-badge right">BUILT BY THE<br><b>10K COMMUNITY</b></div>
     </header>
 
+    <section class="challenge-rules">
+      <h2>10K Lucky Spin NFT Challenge</h2>
+      <p>Use your real X username. You get one 10,000-credit run. The best score on the global leaderboard wins.</p>
+      <div class="rules-grid">
+        <span>10,000 credits only</span>
+        <span>No reset</span>
+        <span>Best score counts</span>
+        <span>One X username per player</span>
+        <span>Winner must verify X ownership</span>
+        <span>Fake/spam entries may be removed</span>
+      </div>
+      <p class="prize-note">Top leaderboard player may receive a community NFT prize.</p>
+    </section>
+
     <section class="layout">
       <aside class="side left-side">
         <div class="big-medallion">10K</div>
@@ -85,8 +99,8 @@
 
         <div class="player-row">
           <label>
-            <span>PLAYER</span>
-            <input id="playerName" maxlength="18" placeholder="@name" />
+            <span>PLAYER / X USERNAME</span>
+            <input id="playerName" maxlength="18" placeholder="@yourXname" />
           </label>
         </div>
       </section>
@@ -122,7 +136,7 @@
       <button id="shareBtn" class="outline-btn wide">Share on X</button>
     </section>
 
-    <footer>Challenge mode: 10,000 credits only. No reset during the NFT challenge. One X name per player. Fake/spam entries may be removed.</footer>
+    <footer>Challenge mode: 10,000 credits only. No reset during the NFT challenge. Use your real X username. The winner must verify X account ownership before receiving the NFT. Fake, spam, duplicate, or suspicious entries may be removed. For community fun only. No real money, no betting, no payouts.</footer>
   </main>
 
   <script src="config.js"></script>
@@ -139,7 +153,7 @@
       oldReset.parentNode.replaceChild(infoOnly, oldReset);
       infoOnly.addEventListener('click', function () {
         if (message) {
-          message.textContent = 'Challenge mode: no reset. You have one 10,000-credit run. Best score stays on the leaderboard.';
+          message.textContent = 'Challenge mode: no reset. One real X username per player. Winner must verify X ownership.';
         }
       });
     });
