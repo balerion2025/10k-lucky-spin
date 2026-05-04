@@ -71,7 +71,6 @@ function renderGrid() {
     const symbol = current[i];
     const inner = cell.querySelector(".inner");
     cell.classList.toggle("win-cell", flatWinners.includes(i));
-
     const extraClass = symbol.logo ? ' class="logo-symbol"' : '';
     inner.innerHTML = `<img src="${symbol.img}" alt="${symbol.name}"${extraClass}>`;
   });
@@ -82,7 +81,6 @@ function updateUI() {
   creditsEl.textContent = credits.toLocaleString("en-US");
   betDisplay.textContent = bet.toLocaleString("en-US");
   winEl.textContent = lastWin.toLocaleString("en-US");
-
   localStorage.setItem("slotV4Credits", credits);
   localStorage.setItem("slotV4Score", score);
   localStorage.setItem("slotV4Bet", bet);
@@ -95,10 +93,9 @@ function cleanName(name) {
 function spin() {
   if (spinning) return;
   if (credits < bet) {
-    messageEl.textContent = "Not enough credits. Hit reset.";
+    messageEl.textContent = `Game over. Your best run score is ${score.toLocaleString("en-US")}. Hit RESET to start a new run.`;
     return;
   }
-
   spinning = true;
   lastWin = 0;
   winningLines = [];
@@ -106,9 +103,7 @@ function spin() {
   updateUI();
   machine.classList.remove("flash");
   messageEl.textContent = "Spinning...";
-
   Array.from(gridEl.children).forEach(cell => cell.classList.add("spinning"));
-
   let ticks = 0;
   const interval = setInterval(() => {
     current = Array.from({length: 9}, () => weightedRandom());
@@ -124,11 +119,9 @@ function spin() {
 async function finishSpin() {
   Array.from(gridEl.children).forEach(cell => cell.classList.remove("spinning"));
   current = Array.from({length: 9}, () => weightedRandom());
-
   const result = evaluateWin();
   winningLines = result.lines;
   lastWin = result.win;
-
   if (lastWin > 0) {
     credits += lastWin;
     score += lastWin;
@@ -136,9 +129,10 @@ async function finishSpin() {
     messageEl.textContent = `WIN! ${result.lines.length} line(s) · +${lastWin.toLocaleString("en-US")}`;
     await saveLeaderboard();
   } else {
-    messageEl.textContent = "No line. Spin again.";
+    messageEl.textContent = credits < bet
+      ? `No line. Game over. Best run score: ${score.toLocaleString("en-US")}. Hit RESET for a new run.`
+      : "No line. Spin again.";
   }
-
   renderGrid();
   updateUI();
   await renderLeaderboard();
@@ -147,16 +141,13 @@ async function finishSpin() {
 
 function evaluateWin() {
   const lines = [];
-
   for (const line of paylines) {
     const [a, b, c] = line;
     if (current[a].id === current[b].id && current[b].id === current[c].id) {
       lines.push(line);
     }
   }
-
   if (!lines.length) return { win: 0, lines: [] };
-
   let multiplier = 0;
   for (const line of lines) {
     const id = current[line[0]].id;
@@ -164,11 +155,9 @@ function evaluateWin() {
     else if (id === "king" || id === "yellow" || id === "blue") multiplier += 9;
     else multiplier += 7;
   }
-
   const diag1 = lines.some(line => line.join(",") === "0,4,8");
   const diag2 = lines.some(line => line.join(",") === "2,4,6");
   if (diag1 && diag2) multiplier += 12;
-
   return { win: bet * multiplier, lines };
 }
 
@@ -186,7 +175,6 @@ function drawLines() {
   resizeCanvas();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!winningLines.length) return;
-
   const w = canvas.width;
   const h = canvas.height;
   const centers = [
@@ -194,13 +182,11 @@ function drawLines() {
     [w * 1/6, h * 3/6], [w * 3/6, h * 3/6], [w * 5/6, h * 3/6],
     [w * 1/6, h * 5/6], [w * 3/6, h * 5/6], [w * 5/6, h * 5/6]
   ];
-
   ctx.lineWidth = Math.max(7, w * 0.016);
   ctx.lineCap = "round";
   ctx.strokeStyle = "rgba(255,216,115,.95)";
   ctx.shadowColor = "rgba(255,79,216,.95)";
   ctx.shadowBlur = 16;
-
   for (const line of winningLines) {
     ctx.beginPath();
     const [first, ...rest] = line;
@@ -213,23 +199,34 @@ function drawLines() {
 async function saveLeaderboard() {
   const name = cleanName(playerNameEl.value);
   localStorage.setItem("slotV4Name", name);
-
   const localList = JSON.parse(localStorage.getItem("slotV4Leaderboard") || "[]");
   const index = localList.findIndex(item => item.name.toLowerCase() === name.toLowerCase());
   const entry = { name, score, credits, lastWin, date: new Date().toISOString() };
-
   if (index >= 0) {
     if (score > localList[index].score) localList[index] = entry;
   } else {
     localList.push(entry);
   }
-
   localList.sort((a, b) => b.score - a.score || b.credits - a.credits);
   localStorage.setItem("slotV4Leaderboard", JSON.stringify(localList.slice(0, 10)));
-
   if (!hasSupabase) return;
-
   try {
+    const existing = await getPlayerGlobalScore(name);
+    if (existing && Number(existing.score) >= score) return;
+    if (existing) {
+      const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?id=eq.${existing.id}`, {
+        method: "PATCH",
+        headers: {
+          "apikey": cfg.SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal"
+        },
+        body: JSON.stringify({ score, credits, last_win: lastWin })
+      });
+      if (!response.ok) throw new Error("Global update failed");
+      return;
+    }
     const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores`, {
       method: "POST",
       headers: {
@@ -238,37 +235,52 @@ async function saveLeaderboard() {
         "Content-Type": "application/json",
         "Prefer": "return=minimal"
       },
-      body: JSON.stringify({
-        name,
-        score,
-        credits,
-        last_win: lastWin
-      })
+      body: JSON.stringify({ name, score, credits, last_win: lastWin })
     });
-
     if (!response.ok) throw new Error("Global save failed");
   } catch (error) {
     console.warn(error);
-    messageEl.textContent = "Local score saved. Global leaderboard save failed.";
+    messageEl.textContent = "Local score saved. Global leaderboard save/update failed.";
+  }
+}
+
+async function getPlayerGlobalScore(name) {
+  if (!hasSupabase) return null;
+  try {
+    const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?select=id,name,score,credits,last_win&name=eq.${encodeURIComponent(name)}&order=score.desc&limit=1`, {
+      headers: {
+        "apikey": cfg.SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`
+      }
+    });
+    if (!response.ok) throw new Error("Player score load failed");
+    const data = await response.json();
+    return data[0] || null;
+  } catch (error) {
+    console.warn(error);
+    return null;
   }
 }
 
 async function getGlobalLeaderboard() {
   if (!hasSupabase) return null;
-
   try {
-    const response = await fetch(
-      `${cfg.SUPABASE_URL}/rest/v1/slot_scores?select=name,score,credits,last_win,created_at&order=score.desc&order=credits.desc&limit=25`,
-      {
-        headers: {
-          "apikey": cfg.SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`
-        }
+    const response = await fetch(`${cfg.SUPABASE_URL}/rest/v1/slot_scores?select=name,score,credits,last_win,created_at&order=score.desc&order=credits.desc&limit=25`, {
+      headers: {
+        "apikey": cfg.SUPABASE_ANON_KEY,
+        "Authorization": `Bearer ${cfg.SUPABASE_ANON_KEY}`
       }
-    );
-
+    });
     if (!response.ok) throw new Error("Global leaderboard load failed");
-    return await response.json();
+    const rows = await response.json();
+    const bestByName = new Map();
+    for (const row of rows) {
+      const key = String(row.name).toLowerCase();
+      if (!bestByName.has(key) || Number(row.score) > Number(bestByName.get(key).score)) {
+        bestByName.set(key, row);
+      }
+    }
+    return Array.from(bestByName.values()).sort((a,b) => Number(b.score) - Number(a.score) || Number(b.credits) - Number(a.credits)).slice(0, 25);
   } catch (error) {
     console.warn(error);
     return null;
@@ -277,7 +289,6 @@ async function getGlobalLeaderboard() {
 
 async function renderLeaderboard() {
   leaderboardEl.innerHTML = "";
-
   const globalList = await getGlobalLeaderboard();
   if (globalList && globalList.length) {
     globalList.forEach(item => {
@@ -287,20 +298,15 @@ async function renderLeaderboard() {
     });
     return;
   }
-
   if (hasSupabase && globalList && !globalList.length) {
     leaderboardEl.innerHTML = "<li>No global wins yet. Be first.</li>";
     return;
   }
-
   const localList = JSON.parse(localStorage.getItem("slotV4Leaderboard") || "[]");
   if (!localList.length) {
-    leaderboardEl.innerHTML = hasSupabase
-      ? "<li>Global leaderboard is connected. No wins yet.</li>"
-      : "<li>No wins yet. Be first.</li>";
+    leaderboardEl.innerHTML = hasSupabase ? "<li>Global leaderboard is connected. No wins yet.</li>" : "<li>No wins yet. Be first.</li>";
     return;
   }
-
   localList.forEach(item => {
     const li = document.createElement("li");
     li.textContent = `${item.name} · ${item.score.toLocaleString("en-US")} pts · ${item.credits.toLocaleString("en-US")} credits`;
@@ -322,7 +328,7 @@ function resetGame() {
   score = 0;
   lastWin = 0;
   winningLines = [];
-  messageEl.textContent = "Reset done. Ready again.";
+  messageEl.textContent = "New run started. Best leaderboard score stays locked.";
   updateUI();
   renderGrid();
 }
